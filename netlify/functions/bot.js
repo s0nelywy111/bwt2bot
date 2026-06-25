@@ -4,7 +4,7 @@ const { Telegraf } = require('telegraf');
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // Реакция на команду /start
-bot.start((ctx) => ctx.reply('Привет! Я готов обновлять твой сайт.'));
+bot.start((ctx) => ctx.reply('Привет! Я готов обновлять твой сайт!'));
 
 // Реакция на твою кастомную команду
 bot.command('update', (ctx) => {

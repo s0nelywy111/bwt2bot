@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <title>Монитор обновлений</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
+
 <body>
     <div style="text-align: center; margin-top: 50px; font-family: sans-serif;">
         <h1>Обновления с Telegram-бота</h1>
@@ -15,6 +17,14 @@
         <ul id="log" style="list-style: none; padding: 0; margin-top: 30px; color: #555;"></ul>
     </div>
 
+    <div style="max-width: 800px; margin: 40px auto;">
+        <h2>Случайные фото из базы</h2>
+        <div id="gallery" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
+            <p id="loading-text">Загружаю фотографии...</p>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
+
 </html>

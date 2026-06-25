@@ -26,7 +26,7 @@ exports.handler = async (event) => {
 
     return { statusCode: 200, body: 'OK' };
   } catch (error) {
-    console.error('Ошибка в боте:', error);
+    console.error('Ошибка в боте: ', error);
     return { statusCode: 400, body: 'Error' };
   }
 };

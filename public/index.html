@@ -9,19 +9,24 @@
 </head>
 
 <body>
-    <div style="text-align: center; margin-top: 50px; font-family: sans-serif;">
-        <h1>Обновления с Telegram-бота</h1>
-        <div id="status" style="font-size: 24px; color: green; margin-top: 20px;">
-            Ожидание команды из бота...
-        </div>
-        <ul id="log" style="list-style: none; padding: 0; margin-top: 30px; color: #555;"></ul>
+    <div class="page-shell">
+        <section class="hero">
+            <div class="eyebrow">Теплая подборка</div>
+            <h2>Трохи нас</h2>
+            <p>Спокойная, светлая и романтичная атмосфера с мягким розовым настроением. Фото будут меняться автоматически, чтобы галерея всегда оставалась живой.</p>
+        </section>
+
+        <section class="gallery-shell">
+            <div id="gallery">
+                <p id="loading-text">Завантажую фото...</p>
+            </div>
+        </section>
     </div>
 
-    <div style="max-width: 800px; margin: 40px auto;">
-        <h2>Случайные фото из базы</h2>
-        <div id="gallery" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
-            <p id="loading-text">Загружаю фотографии...</p>
-        </div>
+    <div id="photo-modal" class="photo-modal" aria-hidden="true">
+        <button id="photo-modal-close" class="photo-modal__close" type="button" aria-label="Закрыть просмотр">×</button>
+        <img id="photo-modal-image" class="photo-modal__image" alt="">
+        <p id="photo-modal-caption" class="photo-modal__caption"></p>
     </div>
 
     <script src="script.js"></script>

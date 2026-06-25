@@ -11,14 +11,49 @@
 <body>
     <div class="page-shell">
         <section class="hero">
-            <div class="eyebrow">Теплая подборка</div>
             <h2>Трохи нас</h2>
-            <p>Спокойная, светлая и романтичная атмосфера с мягким розовым настроением. Фото будут меняться автоматически, чтобы галерея всегда оставалась живой.</p>
+            <p>Кохаю тебе до безтями, сонечко♥♥♥</p>
+            <button id="open-gallery-btn" class="open-gallery-btn" type="button">Открыть галерею</button>
         </section>
 
-        <section class="gallery-shell">
-            <div id="gallery">
-                <p id="loading-text">Завантажую фото...</p>
+        <section id="gallery-panel" class="gallery-shell" aria-hidden="true">
+            <div class="gallery-shell__topbar">
+                <div>
+                    <div class="eyebrow">Галерея</div>
+                    <h3 class="gallery-title">Фото и видео</h3>
+                </div>
+                <div class="gallery-tabs" role="tablist" aria-label="Выбор раздела галереи">
+                    <button class="gallery-tab is-active" type="button" data-gallery-tab="photos">Фото</button>
+                    <button class="gallery-tab" type="button" data-gallery-tab="videos">Видео</button>
+                </div>
+            </div>
+
+            <div class="gallery-sections">
+                <section class="gallery-section is-active" data-gallery-section="photos">
+                    <div class="section-head">
+                        <h4>Фото</h4>
+                        <div class="section-actions">
+                            <button class="section-arrow" type="button" data-scroll-track="photo-track" data-direction="left" aria-label="Прокрутить фото влево">‹</button>
+                            <button class="section-arrow" type="button" data-scroll-track="photo-track" data-direction="right" aria-label="Прокрутить фото вправо">›</button>
+                        </div>
+                    </div>
+                    <div id="photo-track" class="media-track">
+                        <p id="loading-text">Завантажую фото...</p>
+                    </div>
+                </section>
+
+                <section class="gallery-section" data-gallery-section="videos">
+                    <div class="section-head">
+                        <h4>Видео</h4>
+                        <div class="section-actions">
+                            <button class="section-arrow" type="button" data-scroll-track="video-track" data-direction="left" aria-label="Прокрутить видео влево">‹</button>
+                            <button class="section-arrow" type="button" data-scroll-track="video-track" data-direction="right" aria-label="Прокрутить видео вправо">›</button>
+                        </div>
+                    </div>
+                    <div id="video-track" class="media-track">
+                        <p class="empty-state">Видео пока нет</p>
+                    </div>
+                </section>
             </div>
         </section>
     </div>
@@ -26,6 +61,7 @@
     <div id="photo-modal" class="photo-modal" aria-hidden="true">
         <button id="photo-modal-close" class="photo-modal__close" type="button" aria-label="Закрыть просмотр">×</button>
         <img id="photo-modal-image" class="photo-modal__image" alt="">
+        <video id="photo-modal-video" class="photo-modal__video" controls playsinline hidden></video>
         <p id="photo-modal-caption" class="photo-modal__caption"></p>
     </div>
 

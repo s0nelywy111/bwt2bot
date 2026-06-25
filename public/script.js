@@ -5,100 +5,228 @@ const dbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const statusDiv = document.getElementById('status');
 const logList = document.getElementById('log');
-const gallery = document.getElementById('gallery');
+const openGalleryButton = document.getElementById('open-gallery-btn');
+const galleryPanel = document.getElementById('gallery-panel');
+const photoTrack = document.getElementById('photo-track');
+const videoTrack = document.getElementById('video-track');
+const galleryTabs = Array.from(document.querySelectorAll('[data-gallery-tab]'));
+const gallerySections = Array.from(document.querySelectorAll('[data-gallery-section]'));
 const photoModal = document.getElementById('photo-modal');
 const photoModalImage = document.getElementById('photo-modal-image');
+const photoModalVideo = document.getElementById('photo-modal-video');
 const photoModalCaption = document.getElementById('photo-modal-caption');
 const photoModalClose = document.getElementById('photo-modal-close');
-const visiblePhotoCount = 3;
-const rotationIntervalMs = 12000;
 
 let photoPool = [];
-let visiblePhotos = [];
-let rotationTimerId = null;
+let videoPool = [];
+let activeGalleryTab = 'photos';
+let autoScrollTimerId = null;
 
-function pickRandomItems(items, count) {
-  const pool = [...items];
-  const selected = [];
-
-  while (pool.length > 0 && selected.length < count) {
-    const randomIndex = Math.floor(Math.random() * pool.length);
-    selected.push(pool.splice(randomIndex, 1)[0]);
-  }
-
-  return selected;
+function getMediaUrl(item) {
+  return item.media_url || item.image_url || item.video_url || '';
 }
 
-function renderGallery() {
-  if (!gallery) {
+function isVideoUrl(url) {
+  return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url || '');
+}
+
+function normalizeMediaItem(item) {
+  const src = getMediaUrl(item);
+
+  if (!src) {
+    return null;
+  }
+
+  const type = item.media_type || (isVideoUrl(src) ? 'video' : 'photo');
+
+  return {
+    id: String(item.id || `${type}-${src}`),
+    type,
+    src,
+    caption: item.command_text || (type === 'video' ? 'Видео без подписи' : 'Фото без подписи'),
+  };
+}
+
+function createMediaCard(media) {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'media-card';
+  card.dataset.mediaId = media.id;
+  card.dataset.mediaType = media.type;
+
+  const frame = document.createElement('div');
+  frame.className = 'media-card__frame';
+
+  if (media.type === 'video') {
+    const video = document.createElement('video');
+    video.className = 'media-card__video';
+    video.src = media.src;
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    frame.appendChild(video);
+
+    const playBadge = document.createElement('span');
+    playBadge.className = 'media-card__play';
+    playBadge.textContent = '▶';
+    frame.appendChild(playBadge);
+  } else {
+    const image = document.createElement('img');
+    image.className = 'media-card__image';
+    image.src = media.src;
+    image.alt = media.caption;
+    frame.appendChild(image);
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'media-card__overlay';
+
+  const tag = document.createElement('span');
+  tag.className = 'media-card__tag';
+  tag.textContent = media.type === 'video' ? 'Видео' : 'Фото';
+
+  const caption = document.createElement('p');
+  caption.className = 'media-card__caption';
+  caption.textContent = media.caption;
+
+  overlay.appendChild(tag);
+  overlay.appendChild(caption);
+  card.appendChild(frame);
+  card.appendChild(overlay);
+
+  return card;
+}
+
+function renderMediaTrack(trackElement, items, emptyText) {
+  if (!trackElement) {
     return;
   }
 
-  gallery.innerHTML = '';
+  trackElement.innerHTML = '';
 
-  visiblePhotos.forEach(item => {
-    const card = document.createElement('article');
-    card.className = 'photo-card';
-    card.tabIndex = 0;
-    card.setAttribute('role', 'button');
-    card.dataset.photoId = item.id;
-    card.innerHTML = `
-      <img class="photo-card__image" src="${item.image_url}" alt="${item.command_text || 'Фото'}">
-      <div class="photo-card__overlay">
-        <p class="photo-card__caption">${item.command_text || 'Без подписи'}</p>
-      </div>
-    `;
-    gallery.appendChild(card);
+  if (items.length === 0) {
+    const emptyState = document.createElement('p');
+    emptyState.className = 'empty-state';
+    emptyState.textContent = emptyText;
+    trackElement.appendChild(emptyState);
+    return;
+  }
+
+  items.forEach(item => {
+    trackElement.appendChild(createMediaCard(item));
   });
 }
 
-function syncVisiblePhotos(nextPhotos) {
-  visiblePhotos = nextPhotos.slice(0, visiblePhotoCount);
-  renderGallery();
+function renderGallery() {
+  renderMediaTrack(photoTrack, photoPool, 'Фото пока нет');
+  renderMediaTrack(videoTrack, videoPool, 'Видео пока нет');
 }
 
-function rotateVisiblePhoto() {
-  if (photoPool.length <= visiblePhotoCount) {
+function setGalleryOpen(isOpen) {
+  if (!galleryPanel || !openGalleryButton) {
     return;
   }
 
-  const visibleIds = new Set(visiblePhotos.map(photo => photo.id));
-  const candidates = photoPool.filter(photo => !visibleIds.has(photo.id));
+  galleryPanel.classList.toggle('is-open', isOpen);
+  galleryPanel.setAttribute('aria-hidden', String(!isOpen));
+  openGalleryButton.textContent = isOpen ? 'Скрыть галерею' : 'Открыть галерею';
 
-  if (candidates.length === 0) {
+  if (isOpen) {
+    galleryPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    startAutoScroll();
+  } else {
+    stopAutoScroll();
+  }
+}
+
+function setActiveTab(tabName) {
+  activeGalleryTab = tabName;
+
+  galleryTabs.forEach(button => {
+    button.classList.toggle('is-active', button.dataset.galleryTab === tabName);
+  });
+
+  gallerySections.forEach(section => {
+    section.classList.toggle('is-active', section.dataset.gallerySection === tabName);
+  });
+}
+
+function getActiveTrack() {
+  return activeGalleryTab === 'videos' ? videoTrack : photoTrack;
+}
+
+function scrollTrackByStep(trackElement, direction) {
+  if (!trackElement) {
     return;
   }
 
-  const photoToInsert = candidates[Math.floor(Math.random() * candidates.length)];
-  const replaceIndex = Math.floor(Math.random() * visiblePhotos.length);
-  const nextVisiblePhotos = [...visiblePhotos];
-
-  nextVisiblePhotos[replaceIndex] = photoToInsert;
-  syncVisiblePhotos(nextVisiblePhotos);
+  const activeCard = trackElement.querySelector('.media-card');
+  const cardWidth = activeCard ? activeCard.getBoundingClientRect().width + 16 : trackElement.clientWidth * 0.8;
+  trackElement.scrollBy({
+    left: direction === 'left' ? -cardWidth : cardWidth,
+    behavior: 'smooth',
+  });
 }
 
-function startRotation() {
-  if (rotationTimerId) {
-    clearInterval(rotationTimerId);
+function startAutoScroll() {
+  stopAutoScroll();
+
+  autoScrollTimerId = setInterval(() => {
+    const trackElement = getActiveTrack();
+    if (!trackElement || trackElement.children.length <= 1) {
+      return;
+    }
+
+    const activeCard = trackElement.querySelector('.media-card');
+    const cardWidth = activeCard ? activeCard.getBoundingClientRect().width + 16 : trackElement.clientWidth * 0.8;
+    const nextLeft = trackElement.scrollLeft + cardWidth;
+    const maxScrollLeft = trackElement.scrollWidth - trackElement.clientWidth - 4;
+
+    if (nextLeft >= maxScrollLeft) {
+      trackElement.scrollTo({ left: 0, behavior: 'smooth' });
+    } else {
+      trackElement.scrollBy({ left: cardWidth, behavior: 'smooth' });
+    }
+  }, 7000);
+}
+
+function stopAutoScroll() {
+  if (autoScrollTimerId) {
+    clearInterval(autoScrollTimerId);
+    autoScrollTimerId = null;
   }
-
-  rotationTimerId = setInterval(rotateVisiblePhoto, rotationIntervalMs);
 }
 
-function openPhotoModal(photo) {
-  if (!photoModal || !photoModalImage || !photoModalCaption || !photo) {
+function findMediaById(mediaId, mediaType) {
+  const pools = mediaType === 'video' ? videoPool : photoPool;
+  return pools.find(item => item.id === mediaId);
+}
+
+function openMediaModal(media) {
+  if (!photoModal || !photoModalImage || !photoModalVideo || !photoModalCaption || !media) {
     return;
   }
 
-  photoModalImage.src = photo.image_url;
-  photoModalImage.alt = photo.command_text || 'Фото';
-  photoModalCaption.textContent = photo.command_text || 'Без подписи';
+  photoModalImage.hidden = media.type !== 'photo';
+  photoModalVideo.hidden = media.type !== 'video';
+
+  if (media.type === 'video') {
+    photoModalVideo.src = media.src;
+    photoModalVideo.currentTime = 0;
+    photoModalVideo.play().catch(() => {});
+  } else {
+    photoModalImage.src = media.src;
+    photoModalImage.alt = media.caption;
+  }
+
+  photoModalCaption.textContent = media.caption;
   photoModal.classList.add('is-open');
   photoModal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('modal-open');
 }
 
 function closePhotoModal() {
-  if (!photoModal || !photoModalImage || !photoModalCaption) {
+  if (!photoModal || !photoModalImage || !photoModalVideo || !photoModalCaption) {
     return;
   }
 
@@ -106,41 +234,59 @@ function closePhotoModal() {
   photoModal.setAttribute('aria-hidden', 'true');
   photoModalImage.src = '';
   photoModalImage.alt = '';
+  photoModalVideo.pause();
+  photoModalVideo.removeAttribute('src');
+  photoModalVideo.load();
   photoModalCaption.textContent = '';
+  document.body.classList.remove('modal-open');
 }
 
-if (gallery) {
-  gallery.addEventListener('click', event => {
-    const card = event.target.closest('.photo-card');
+if (openGalleryButton) {
+  openGalleryButton.addEventListener('click', () => {
+    const isOpen = !galleryPanel || !galleryPanel.classList.contains('is-open');
+    setGalleryOpen(isOpen);
+  });
+}
+
+galleryTabs.forEach(button => {
+  button.addEventListener('click', () => setActiveTab(button.dataset.galleryTab));
+});
+
+document.querySelectorAll('[data-scroll-track]').forEach(button => {
+  button.addEventListener('click', () => {
+    const trackElement = document.getElementById(button.dataset.scrollTrack);
+    scrollTrackByStep(trackElement, button.dataset.direction);
+  });
+});
+
+if (photoTrack) {
+  photoTrack.addEventListener('click', event => {
+    const card = event.target.closest('.media-card');
 
     if (!card) {
       return;
     }
 
-    const photo = visiblePhotos.find(item => String(item.id) === card.dataset.photoId);
+    const media = findMediaById(card.dataset.mediaId, card.dataset.mediaType);
 
-    if (photo) {
-      openPhotoModal(photo);
+    if (media) {
+      openMediaModal(media);
     }
   });
+}
 
-  gallery.addEventListener('keydown', event => {
-    if (event.key !== 'Enter' && event.key !== ' ') {
-      return;
-    }
-
-    const card = event.target.closest('.photo-card');
+if (videoTrack) {
+  videoTrack.addEventListener('click', event => {
+    const card = event.target.closest('.media-card');
 
     if (!card) {
       return;
     }
 
-    event.preventDefault();
+    const media = findMediaById(card.dataset.mediaId, card.dataset.mediaType);
 
-    const photo = visiblePhotos.find(item => String(item.id) === card.dataset.photoId);
-
-    if (photo) {
-      openPhotoModal(photo);
+    if (media) {
+      openMediaModal(media);
     }
   });
 }
@@ -163,34 +309,29 @@ document.addEventListener('keydown', event => {
   }
 });
 
-// ФУНКЦИЯ ЗАГРУЗКИ СЛУЧАЙНЫХ ФОТО ПРИ СТАРТЕ
-async function loadRandomPhotos() {
-  // Запрашиваем из базы все записи, где image_url НЕ пустой
+async function loadGalleryMedia() {
   const { data, error } = await dbClient
     .from('updates')
     .select('*')
-    .not('image_url', 'is', null);
+    .order('id', { ascending: false });
 
   if (error) {
-    console.error('Ошибка загрузки фото:', error);
-    gallery.innerHTML = '<p style="color:red;">Не удалось загрузить галерею</p>';
+    console.error('Ошибка загрузки галереи:', error);
+    if (photoTrack) {
+      photoTrack.innerHTML = '<p class="empty-state empty-state--error">Не удалось загрузить галерею</p>';
+    }
     return;
   }
 
-  if (data.length === 0) {
-    gallery.innerHTML = '<p>Пока нет загруженных фотографий.</p>';
-    return;
-  }
+  const mediaItems = data.map(normalizeMediaItem).filter(Boolean);
+  photoPool = mediaItems.filter(item => item.type === 'photo');
+  videoPool = mediaItems.filter(item => item.type === 'video');
 
-  photoPool = data.filter(item => Boolean(item.image_url));
-  syncVisiblePhotos(pickRandomItems(photoPool, visiblePhotoCount));
-  startRotation();
+  renderGallery();
 }
 
-// Запускаем функцию загрузки фото сразу при открытии сайта
-loadRandomPhotos();
+loadGalleryMedia();
 
-// Подписываемся на обновления в реальном времени (как было)
 dbClient
   .channel('public:updates')
   .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'updates' }, payload => {
@@ -198,19 +339,17 @@ dbClient
     if (statusDiv) {
       statusDiv.innerText = `Получено обновление: "${newData.command_text}"`;
     }
-    
-    // Если прилетела картинка, добавляем ее в общий пул и мягко показываем в галерее.
-    if (newData.image_url) {
-      photoPool.unshift(newData);
 
-      if (visiblePhotos.length < visiblePhotoCount) {
-        syncVisiblePhotos(pickRandomItems(photoPool, visiblePhotoCount));
+    const normalized = normalizeMediaItem(newData);
+
+    if (normalized) {
+      if (normalized.type === 'video') {
+        videoPool.unshift(normalized);
       } else {
-        const replaceIndex = Math.floor(Math.random() * visiblePhotos.length);
-        const nextVisiblePhotos = [...visiblePhotos];
-        nextVisiblePhotos[replaceIndex] = newData;
-        syncVisiblePhotos(nextVisiblePhotos);
+        photoPool.unshift(normalized);
       }
+
+      renderGallery();
     } else {
       if (logList) {
         const li = document.createElement('li');

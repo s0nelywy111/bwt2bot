@@ -204,13 +204,13 @@ body::before {
 
 .media-track {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 16px;
     overflow: hidden;
 }
 
 .media-track--preview {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
 }
 
 .media-card {
@@ -426,34 +426,50 @@ body.modal-open {
     overflow: hidden;
 }
 
-@media (max-width: 640px) {
+/* --- ПЛАНШЕТЫ И НЕБОЛЬШИЕ ЭКРАНЫ (до 900px) --- */
+@media (max-width: 900px) {
     .page-shell {
-        padding: 24px 14px 40px;
+        padding: 30px 16px 40px;
     }
 
-    .hero p {
-        font-size: 15px;
+    .hero h2 {
+        font-size: 2.4rem;
+    }
+
+    /* Делаем карточки чуть меньше, чтобы влезало больше в ряд */
+    .media-track {
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 14px;
+    }
+    
+    .media-track--preview {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+}
+
+/* --- ТЕЛЕФОНЫ (до 600px) --- */
+@media (max-width: 600px) {
+    .hero h2 {
+        font-size: 2rem;
     }
 
     .open-gallery-btn {
         width: 100%;
-        max-width: 320px;
+        max-width: none;
     }
 
-    .featured-preview {
-        padding: 14px;
-        border-radius: 22px;
-    }
-
+    .featured-preview,
     .gallery-shell {
-        padding: 14px;
-        border-radius: 22px;
+        padding: 16px;
+        border-radius: 20px;
     }
 
+    /* Перестраиваем шапку галереи и табы друг под друга */
     .gallery-shell__topbar,
     .section-head {
         align-items: flex-start;
         flex-direction: column;
+        gap: 12px;
     }
 
     .gallery-tabs {
@@ -463,27 +479,42 @@ body.modal-open {
 
     .gallery-tab {
         flex: 1;
+        text-align: center;
     }
 
+    /* На мобильных делаем сетку из 2 колонок (или 1, если совсем узко) */
     .media-track {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 10px;
     }
 
+    /* Превью на телефоне делаем в одну колонку, чтобы было крупно */
     .media-track--preview {
         grid-template-columns: 1fr;
     }
 
+    /* На телефонах нет курсора (hover), поэтому подписи показываем всегда */
     .media-card__overlay {
         opacity: 1;
         transform: none;
+        background: linear-gradient(180deg, rgba(255, 245, 248, 0), rgba(58, 28, 40, 0.85));
     }
 
+    /* Уменьшаем крестик закрытия фото, чтобы не перекрывал лица */
     .photo-modal {
-        padding: 16px;
+        padding: 10px;
     }
 
     .photo-modal__close {
-        top: 12px;
-        right: 12px;
+        top: 10px;
+        right: 10px;
+        width: 40px;
+        height: 40px;
+        font-size: 24px;
+    }
+
+    .photo-modal__caption {
+        font-size: 14px;
+        margin-top: 10px;
     }
 }

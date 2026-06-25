@@ -1,32 +1,42 @@
 const { Telegraf } = require('telegraf');
+const { createClient } = require('@supabase/supabase-js');
 
-// Токен мы безопасно спрячем в переменных окружения Netlify
+// Инициализируем бота и Supabase
 const bot = new Telegraf(process.env.BOT_TOKEN);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-// Реакция на команду /start
-bot.start((ctx) => ctx.reply('Привет! Я готов обновлять твой сайт!'));
+bot.start((ctx) => ctx.reply('Привет! Напиши /update, чтобы отправить сигнал на сайт.'));
 
-// Реакция на твою кастомную команду
-bot.command('update', (ctx) => {
-  // Позже здесь будет код отправки данных в Supabase/Firebase
-  ctx.reply('Команда получена! Передаю сигнал на сайт...');
+// Обработка команды /update
+bot.command('update', async (ctx) => {
+  try {
+    // Получаем текст после команды или пишем стандартный
+    const text = ctx.message.text.replace('/update', '').trim() || 'Кнопка нажата!';
+
+    // Записываем данные в Supabase
+    const { error } = await supabase
+      .from('updates')
+      .insert([{ command_text: text }]);
+
+    if (error) throw error;
+
+    ctx.reply(`✅ Сигнал "${text}" отправлен на сайт!`);
+  } catch (error) {
+    console.error('Ошибка Supabase:', error);
+    ctx.reply('❌ Не удалось обновить сайт. Ошибка на сервере.');
+  }
 });
 
-// Обработчик для Netlify Functions
 exports.handler = async (event) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method Not Allowed' };
+  }
   try {
-    // Убеждаемся, что запрос пришел методом POST (так делает Telegram)
-    if (event.httpMethod !== 'POST') {
-      return { statusCode: 405, body: 'Method Not Allowed' };
-    }
-
-    // Передаем сообщение от пользователя внутрь Telegraf
     const body = JSON.parse(event.body);
     await bot.handleUpdate(body);
-
     return { statusCode: 200, body: 'OK' };
   } catch (error) {
-    console.error('Ошибка в боте: ', error);
-    return { statusCode: 400, body: 'Error' };
+    console.error(error);
+    return { statusCode: 500, body: 'Error' };
   }
 };

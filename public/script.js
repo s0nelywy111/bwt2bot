@@ -6,6 +6,8 @@ const dbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const statusDiv = document.getElementById('status');
 const logList = document.getElementById('log');
 const openGalleryButton = document.getElementById('open-gallery-btn');
+const featuredPreview = document.getElementById('featured-preview');
+const featuredTrack = document.getElementById('featured-track');
 const galleryPanel = document.getElementById('gallery-panel');
 const photoTrack = document.getElementById('photo-track');
 const videoTrack = document.getElementById('video-track');
@@ -19,8 +21,11 @@ const photoModalClose = document.getElementById('photo-modal-close');
 
 let photoPool = [];
 let videoPool = [];
+let featuredPhotos = [];
 let activeGalleryTab = 'photos';
-let autoScrollTimerId = null;
+let featuredRotationTimerId = null;
+const featuredPhotoCount = 3;
+const featuredRotationIntervalMs = 2800;
 
 function getMediaUrl(item) {
   return item.media_url || item.image_url || item.video_url || '';
@@ -117,25 +122,96 @@ function renderMediaTrack(trackElement, items, emptyText) {
   });
 }
 
+function renderFeaturedPreview() {
+  if (!featuredTrack) {
+    return;
+  }
+
+  featuredTrack.innerHTML = '';
+
+  if (featuredPhotos.length === 0) {
+    const emptyState = document.createElement('p');
+    emptyState.className = 'empty-state';
+    emptyState.textContent = 'Пока нет загруженных фотографий.';
+    featuredTrack.appendChild(emptyState);
+    return;
+  }
+
+  featuredPhotos.forEach(item => {
+    featuredTrack.appendChild(createMediaCard(item));
+  });
+}
+
+function pickRandomItems(items, count) {
+  const pool = [...items];
+  const selected = [];
+
+  while (pool.length > 0 && selected.length < count) {
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    selected.push(pool.splice(randomIndex, 1)[0]);
+  }
+
+  return selected;
+}
+
+function syncFeaturedPhotos(nextPhotos) {
+  featuredPhotos = nextPhotos.slice(0, featuredPhotoCount);
+  renderFeaturedPreview();
+}
+
+function rotateFeaturedPhoto() {
+  if (photoPool.length <= featuredPhotoCount || featuredPhotos.length === 0) {
+    return;
+  }
+
+  const visibleIds = new Set(featuredPhotos.map(photo => photo.id));
+  const candidates = photoPool.filter(photo => !visibleIds.has(photo.id));
+
+  if (candidates.length === 0) {
+    return;
+  }
+
+  const photoToInsert = candidates[Math.floor(Math.random() * candidates.length)];
+  const replaceIndex = Math.floor(Math.random() * featuredPhotos.length);
+  const nextFeaturedPhotos = [...featuredPhotos];
+
+  nextFeaturedPhotos[replaceIndex] = photoToInsert;
+  syncFeaturedPhotos(nextFeaturedPhotos);
+}
+
+function startFeaturedRotation() {
+  stopFeaturedRotation();
+  featuredRotationTimerId = setInterval(rotateFeaturedPhoto, featuredRotationIntervalMs);
+}
+
+function stopFeaturedRotation() {
+  if (featuredRotationTimerId) {
+    clearInterval(featuredRotationTimerId);
+    featuredRotationTimerId = null;
+  }
+}
+
 function renderGallery() {
   renderMediaTrack(photoTrack, photoPool, 'Фото пока нет');
   renderMediaTrack(videoTrack, videoPool, 'Видео пока нет');
 }
 
 function setGalleryOpen(isOpen) {
-  if (!galleryPanel || !openGalleryButton) {
+  if (!galleryPanel || !openGalleryButton || !featuredPreview) {
     return;
   }
 
   galleryPanel.classList.toggle('is-open', isOpen);
   galleryPanel.setAttribute('aria-hidden', String(!isOpen));
   openGalleryButton.textContent = isOpen ? 'Скрыть галерею' : 'Открыть галерею';
+  featuredPreview.classList.toggle('is-hidden', isOpen);
 
   if (isOpen) {
     galleryPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    startAutoScroll();
+    stopFeaturedRotation();
   } else {
-    stopAutoScroll();
+    renderFeaturedPreview();
+    startFeaturedRotation();
   }
 }
 
@@ -149,52 +225,6 @@ function setActiveTab(tabName) {
   gallerySections.forEach(section => {
     section.classList.toggle('is-active', section.dataset.gallerySection === tabName);
   });
-}
-
-function getActiveTrack() {
-  return activeGalleryTab === 'videos' ? videoTrack : photoTrack;
-}
-
-function scrollTrackByStep(trackElement, direction) {
-  if (!trackElement) {
-    return;
-  }
-
-  const activeCard = trackElement.querySelector('.media-card');
-  const cardWidth = activeCard ? activeCard.getBoundingClientRect().width + 16 : trackElement.clientWidth * 0.8;
-  trackElement.scrollBy({
-    left: direction === 'left' ? -cardWidth : cardWidth,
-    behavior: 'smooth',
-  });
-}
-
-function startAutoScroll() {
-  stopAutoScroll();
-
-  autoScrollTimerId = setInterval(() => {
-    const trackElement = getActiveTrack();
-    if (!trackElement || trackElement.children.length <= 1) {
-      return;
-    }
-
-    const activeCard = trackElement.querySelector('.media-card');
-    const cardWidth = activeCard ? activeCard.getBoundingClientRect().width + 16 : trackElement.clientWidth * 0.8;
-    const nextLeft = trackElement.scrollLeft + cardWidth;
-    const maxScrollLeft = trackElement.scrollWidth - trackElement.clientWidth - 4;
-
-    if (nextLeft >= maxScrollLeft) {
-      trackElement.scrollTo({ left: 0, behavior: 'smooth' });
-    } else {
-      trackElement.scrollBy({ left: cardWidth, behavior: 'smooth' });
-    }
-  }, 7000);
-}
-
-function stopAutoScroll() {
-  if (autoScrollTimerId) {
-    clearInterval(autoScrollTimerId);
-    autoScrollTimerId = null;
-  }
 }
 
 function findMediaById(mediaId, mediaType) {
@@ -250,13 +280,6 @@ if (openGalleryButton) {
 
 galleryTabs.forEach(button => {
   button.addEventListener('click', () => setActiveTab(button.dataset.galleryTab));
-});
-
-document.querySelectorAll('[data-scroll-track]').forEach(button => {
-  button.addEventListener('click', () => {
-    const trackElement = document.getElementById(button.dataset.scrollTrack);
-    scrollTrackByStep(trackElement, button.dataset.direction);
-  });
 });
 
 if (photoTrack) {
@@ -326,11 +349,13 @@ async function loadGalleryMedia() {
   const mediaItems = data.map(normalizeMediaItem).filter(Boolean);
   photoPool = mediaItems.filter(item => item.type === 'photo');
   videoPool = mediaItems.filter(item => item.type === 'video');
+  syncFeaturedPhotos(pickRandomItems(photoPool, featuredPhotoCount));
 
   renderGallery();
 }
 
 loadGalleryMedia();
+startFeaturedRotation();
 
 dbClient
   .channel('public:updates')
@@ -347,9 +372,15 @@ dbClient
         videoPool.unshift(normalized);
       } else {
         photoPool.unshift(normalized);
+        if (!galleryPanel || galleryPanel.getAttribute('aria-hidden') === 'true') {
+          syncFeaturedPhotos(pickRandomItems(photoPool, featuredPhotoCount));
+        }
       }
 
       renderGallery();
+      if (featuredPreview && !featuredPreview.classList.contains('is-hidden')) {
+        renderFeaturedPreview();
+      }
     } else {
       if (logList) {
         const li = document.createElement('li');

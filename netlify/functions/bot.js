@@ -2,7 +2,7 @@ const { Telegraf } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-// ИСПОЛЬЗУЕМ СЕКРЕТНЫЙ КЛЮЧ ДЛЯ БЭКЕНДА (чтобы обходить ограничения записи)
+// ВИКОРИСТОВУЄМО СЕКРЕТНИЙ КЛЮЧ ДЛЯ БЕКЕНДУ (щоб обходити обмеження запису)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 function getFileExtension(mimeType, fallbackExtension = 'bin') {
@@ -34,41 +34,39 @@ async function uploadTelegramMedia(ctx, fileId, fileName, contentType) {
   return publicData.publicUrl;
 }
 
-bot.start((ctx) => ctx.reply('Привіт, просто загрузи фото і додай опис!'));
+bot.start((ctx) => ctx.reply('Привіт, просто завантаж фото і додай опис!'));
 
-// Старая обработка текста
+// Стара обробка тексту
 bot.command('update', async (ctx) => {
   try {
-    const text = ctx.message.text.replace('/update', '').trim() || 'Кнопка нажата!';
+    const text = ctx.message.text.replace('/update', '').trim() || 'Кнопка натиснута!';
     const { error } = await supabase.from('updates').insert([{ command_text: text }]);
     if (error) throw error;
-    ctx.reply(`✅ Сигнал "${text}" отправлен!`);
+    ctx.reply(`✅ Сигнал "${text}" надіслано!`);
   } catch (error) {
-    ctx.reply('❌ Ошибка базы данных.');
+    ctx.reply('❌ Помилка бази даних.');
   }
 });
 
-// НОВАЯ МАГИЯ: Обработка фотографий
+// НОВА МАГІЯ: Обробка фотографій
 bot.on('photo', async (ctx) => {
   try {
-    ctx.reply('Получил фото! Загружаю в облако, подожди пару секунд...');
+    ctx.reply('Отримав фото! Завантажую в хмару, зачекай кілька секунд...');
 
     const photo = ctx.message.photo[ctx.message.photo.length - 1];
     const fileName = `${Date.now()}_${photo.file_id}.jpg`;
     const imageUrl = await uploadTelegramMedia(ctx, photo.file_id, fileName, 'image/jpeg');
-
-    const caption = ctx.message.caption || 'Фото без подписи';
+    const caption = ctx.message.caption || 'Фото без підпису';
     const { error: dbError } = await supabase.from('updates').insert([{ 
       command_text: caption, 
       image_url: imageUrl 
     }]);
 
     if (dbError) throw dbError;
-
-    ctx.reply('✅ Фотография успешно загружена на сайт!');
+    ctx.reply('✅ Фотографію успішно завантажено на сайт!');
   } catch (error) {
-    console.error('Ошибка обработки фото:', error);
-    ctx.reply('❌ Произошла ошибка при загрузке фото.');
+    console.error('Помилка обробки фото:', error);
+    ctx.reply('❌ Сталася помилка під час завантаження фото.');
   }
 });
 
@@ -79,10 +77,10 @@ bot.on(['video', 'animation'], async (ctx) => {
     const extension = getFileExtension(mimeType, 'mp4');
     const fileName = `${Date.now()}_${media.file_id}.${extension}`;
 
-    ctx.reply('Получил видео! Загружаю в облако, подожди пару секунд...');
+    ctx.reply('Отримав відео! Завантажую в хмару, зачекай кілька секунд...');
 
     const mediaUrl = await uploadTelegramMedia(ctx, media.file_id, fileName, mimeType);
-    const caption = ctx.message.caption || 'Видео без подписи';
+    const caption = ctx.message.caption || 'Відео без підпису';
 
     const { error: dbError } = await supabase.from('updates').insert([{ 
       command_text: caption,
@@ -90,11 +88,10 @@ bot.on(['video', 'animation'], async (ctx) => {
     }]);
 
     if (dbError) throw dbError;
-
-    ctx.reply('✅ Видео успешно загружено на сайт!');
+    ctx.reply('✅ Відео успішно завантажено на сайт!');
   } catch (error) {
-    console.error('Ошибка обработки видео:', error);
-    ctx.reply('❌ Произошла ошибка при загрузке видео.');
+    console.error('Помилка обробки відео:', error);
+    ctx.reply('❌ Сталася помилка під час завантаження відео.');
   }
 });
 
@@ -108,10 +105,11 @@ bot.on('document', async (ctx) => {
     const extension = getFileExtension(document.mime_type, 'mp4');
     const fileName = `${Date.now()}_${document.file_id}.${extension}`;
 
-    ctx.reply('Получил видеофайл! Загружаю в облако, подожди пару секунд...');
+    ctx.reply('Отримав відеофайл! Завантажую в хмару, зачекай кілька секунд...');
 
     const mediaUrl = await uploadTelegramMedia(ctx, document.file_id, fileName, document.mime_type);
-    const caption = ctx.message.caption || 'Видео без подписи';
+
+    const caption = ctx.message.caption || 'Відео без підпису';
 
     const { error: dbError } = await supabase.from('updates').insert([{ 
       command_text: caption,
@@ -119,20 +117,19 @@ bot.on('document', async (ctx) => {
     }]);
 
     if (dbError) throw dbError;
-
-    ctx.reply('✅ Видео успешно загружено на сайт!');
+    ctx.reply('✅ Відеофайл успішно завантажено на сайт!');
   } catch (error) {
-    console.error('Ошибка обработки видеофайла:', error);
-    ctx.reply('❌ Произошла ошибка при загрузке видеофайла.');
+    console.error('Помилка обробки відеофайлу:', error);
+    ctx.reply('❌ Сталася помилка під час завантаження відеофайлу.');
   }
 });
 
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
+  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Метод не дозволений' };
   try {
     await bot.handleUpdate(JSON.parse(event.body));
-    return { statusCode: 200, body: 'OK' };
+    return { statusCode: 200, body: 'Гаразд' };
   } catch (error) {
-    return { statusCode: 500, body: 'Error' };
+    return { statusCode: 500, body: 'Помилка' };
   }
 };

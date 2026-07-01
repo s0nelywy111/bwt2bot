@@ -58,7 +58,7 @@ function normalizeMediaItem(item) {
   const type = isCollection ? 'collection' : item.media_type || (isVideoUrl(src) ? 'video' : 'photo');
   const captionFallbacks = {
     collection: 'Колекція без підпису',
-    video: 'Видео без подписи',
+    video: 'Відео без підпису',
     photo: 'Фото без підпису',
   };
   const caption = isCollection ? rawCaption.replace(COLLECTION_PREFIX, '') : rawCaption;
@@ -108,7 +108,7 @@ function createMediaCard(media) {
 
   const tag = document.createElement('span');
   tag.className = 'media-card__tag';
-  tag.textContent = media.type === 'collection' ? 'Колекція' : media.type === 'video' ? 'Видео' : 'Фото';
+  tag.textContent = media.type === 'collection' ? 'Колекція' : media.type === 'video' ? 'Відео' : 'Фото';
 
   const caption = document.createElement('p');
   caption.className = 'media-card__caption';
@@ -152,7 +152,7 @@ function renderFeaturedPreview() {
   if (featuredPhotos.length === 0) {
     const emptyState = document.createElement('p');
     emptyState.className = 'empty-state';
-    emptyState.textContent = 'Пока нет загруженных фотографий.';
+    emptyState.textContent = 'Тут поки немає фото.';
     featuredTrack.appendChild(emptyState);
     return;
   }
@@ -212,9 +212,9 @@ function stopFeaturedRotation() {
 }
 
 function renderGallery() {
-  renderMediaTrack(photoTrack, photoPool, 'Фото пока нет');
-  renderMediaTrack(videoTrack, videoPool, 'Видео пока нет');
-  renderMediaTrack(collectionTrack, collectionPool, 'Колекцій поки немає');
+  renderMediaTrack(photoTrack, photoPool, 'Тут поки немає фото.');
+  renderMediaTrack(videoTrack, videoPool, 'Тут поки немає відео.');
+  renderMediaTrack(collectionTrack, collectionPool, 'Тут поки немає колекцій.');
 }
 
 function setGalleryOpen(isOpen) {
@@ -224,7 +224,7 @@ function setGalleryOpen(isOpen) {
 
   galleryPanel.classList.toggle('is-open', isOpen);
   galleryPanel.setAttribute('aria-hidden', String(!isOpen));
-  openGalleryButton.textContent = isOpen ? 'Скрыть галерею' : 'Открыть галерею';
+  openGalleryButton.textContent = isOpen ? 'Сховати галерею' : 'Відкрити галерею';
   featuredPreview.classList.toggle('is-hidden', isOpen);
 
   if (isOpen) {
@@ -385,9 +385,9 @@ async function loadGalleryMedia() {
     .order('id', { ascending: false });
 
   if (error) {
-    console.error('Ошибка загрузки галереи:', error);
+    console.error('Помилка при спробі відкрити галерею:', error);
     if (photoTrack) {
-      photoTrack.innerHTML = '<p class="empty-state empty-state--error">Не удалось загрузить галерею</p>';
+      photoTrack.innerHTML = '<p class="empty-state empty-state--error">Помилка. Не вдалось відкрити галерею</p>';
     }
     return;
   }
@@ -409,7 +409,7 @@ dbClient
   .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'updates' }, payload => {
     const newData = payload.new;
     if (statusDiv) {
-      statusDiv.innerText = `Получено обновление: "${newData.command_text}"`;
+      statusDiv.innerText = `Отримано оновлення: "${newData.command_text}"`;
     }
 
     const normalized = normalizeMediaItem(newData);

@@ -65,6 +65,45 @@ function parseCollectionMetadata(rawCaption) {
   };
 }
 
+function parseCollectionPayload(rawCaption) {
+  if (!rawCaption || !rawCaption.trim().startsWith('{')) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawCaption);
+
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+
+    return parsed;
+  } catch (error) {
+    return null;
+  }
+}
+
+function normalizeCollectionItems(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items
+    .map((item, index) => {
+      if (!item || !item.url) {
+        return null;
+      }
+
+      return {
+        id: String(item.id || `${item.type || 'media'}-${index}-${item.url}`),
+        type: item.type === 'video' ? 'video' : 'photo',
+        src: item.url,
+        caption: item.caption || '',
+      };
+    })
+    .filter(Boolean);
+}
+
 function normalizeMediaItem(item) {
   const src = getMediaUrl(item);
 
@@ -73,12 +112,28 @@ function normalizeMediaItem(item) {
   }
 
   const rawCaption = item.command_text || '';
+  const collectionPayload = parseCollectionPayload(rawCaption);
+  const isCollectionRecord = item.media_type === 'collection' || Boolean(collectionPayload?.items?.length);
   const collectionMetadata = parseCollectionMetadata(rawCaption);
   const type = item.media_type || (isVideoUrl(src) ? 'video' : 'photo');
   const captionFallbacks = {
     video: 'Відео без підпису',
     photo: 'Фото без підпису',
   };
+
+  if (isCollectionRecord) {
+    const collectionItems = normalizeCollectionItems(collectionPayload?.items);
+
+    return {
+      id: String(item.id || `collection-${src}`),
+      type: 'collection',
+      src,
+      caption: collectionPayload?.caption || rawCaption || 'Колекція без підпису',
+      items: collectionItems.length > 0 ? collectionItems : [{ id: String(item.id || `collection-cover-${src}`), type: isVideoUrl(src) ? 'video' : 'photo', src, caption: collectionPayload?.caption || rawCaption || 'Колекція без підпису' }],
+      collectionKey: collectionPayload?.collectionId || String(item.id || src),
+      isCollectionMember: false,
+    };
+  }
 
   return {
     id: String(item.id || `${type}-${src}`),
@@ -182,6 +237,11 @@ function buildGalleryPools(items) {
   const collectionMap = new Map();
 
   items.forEach(item => {
+    if (item.type === 'collection' && Array.isArray(item.items) && item.items.length > 0) {
+      collectionMap.set(item.collectionKey || item.id, item);
+      return;
+    }
+
     if (item.isCollectionMember && item.collectionKey) {
       const collectionId = String(item.collectionKey);
 
@@ -209,9 +269,9 @@ function buildGalleryPools(items) {
     .filter(collection => collection.items.length > 0)
     .map(collection => ({
       ...collection,
-      src: collection.items[0].src,
-      cover: collection.items[0],
-      count: collection.items.length,
+      src: collection.src || collection.items[0].src,
+      cover: collection.cover || collection.items[0],
+      count: collection.count || collection.items.length,
     }));
 
   return { photos, videos, collections };

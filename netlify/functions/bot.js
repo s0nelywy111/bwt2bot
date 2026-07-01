@@ -113,6 +113,14 @@ function createCollectionCommandText(collectionId, caption) {
   return `${COLLECTION_PREFIX}${collectionId}|${caption}`;
 }
 
+function createCollectionPayload({ collectionId, caption, items }) {
+  return JSON.stringify({
+    collectionId,
+    caption,
+    items,
+  });
+}
+
 async function sendUploadHelp(ctx) {
   await ctx.reply(
     `Привіт, просто завантаж медіа і додай опис!\n\n${SUPPORTED_FORMATS_MESSAGE}`
@@ -190,6 +198,7 @@ bot.on(media_group(), async (ctx) => {
 
     const uploadedMedia = [];
     const collectionId = group[0]?.media_group_id || `collection-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const caption = group.find(item => item.caption)?.caption || `Колекція з ${group.length} файлів`;
 
     for (const media of group) {
       const details = getTelegramMediaDetails(media);
@@ -209,17 +218,23 @@ bot.on(media_group(), async (ctx) => {
         url: mediaUrl,
         type: details.mediaType,
       });
-
-      await saveMediaRecord({
-        commandText: createCollectionCommandText(collectionId, group.find(item => item.caption)?.caption || `Колекція з ${group.length} файлів`),
-        mediaUrl,
-        mediaType: details.mediaType,
-      });
     }
 
     if (uploadedMedia.length === 0) {
       throw new Error('Колекція не містить підтримуваних медіа');
     }
+
+    const coverMedia = uploadedMedia.find(item => item.type === 'photo') || uploadedMedia[0];
+
+    await saveMediaRecord({
+      commandText: createCollectionPayload({
+        collectionId,
+        caption,
+        items: uploadedMedia,
+      }),
+      mediaUrl: coverMedia.url,
+      mediaType: 'collection',
+    });
 
     await ctx.reply('✅ Колекцію успішно завантажено на сайт!');
   } catch (error) {

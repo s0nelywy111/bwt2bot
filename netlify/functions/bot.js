@@ -1,7 +1,12 @@
 const { Telegraf } = require('telegraf');
+const { MediaGroup, media_group } = require('@dietime/telegraf-media-group');
 const { createClient } = require('@supabase/supabase-js');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
+const COLLECTION_PREFIX = '__COLLECTION__:';
+
+bot.use(new MediaGroup({ timeout: 1000 }).middleware());
+
 // ВИКОРИСТОВУЄМО СЕКРЕТНИЙ КЛЮЧ ДЛЯ БЕКЕНДУ (щоб обходити обмеження запису)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
@@ -34,39 +39,85 @@ async function uploadTelegramMedia(ctx, fileId, fileName, contentType) {
   return publicData.publicUrl;
 }
 
-bot.start((ctx) => ctx.reply('Привіт, просто завантаж фото і додай опис!'));
+function getTelegramMediaDetails(media) {
+  if (media.photo) {
+    const photo = media.photo[media.photo.length - 1];
 
-// Стара обробка тексту
-bot.command('update', async (ctx) => {
-  try {
-    const text = ctx.message.text.replace('/update', '').trim() || 'Кнопка натиснута!';
-    const { error } = await supabase.from('updates').insert([{ command_text: text }]);
-    if (error) throw error;
-    ctx.reply(`✅ Сигнал "${text}" надіслано!`);
-  } catch (error) {
-    ctx.reply('❌ Помилка бази даних.');
+    return {
+      fileId: photo.file_id,
+      fileName: `${Date.now()}_${photo.file_id}.jpg`,
+      contentType: 'image/jpeg',
+      mediaType: 'photo',
+    };
   }
-});
+
+  if (media.video) {
+    const mimeType = media.video.mime_type || 'video/mp4';
+
+    return {
+      fileId: media.video.file_id,
+      fileName: `${Date.now()}_${media.video.file_id}.${getFileExtension(mimeType, 'mp4')}`,
+      contentType: mimeType,
+      mediaType: 'video',
+    };
+  }
+
+  return null;
+}
+
+async function saveMediaRecord({ commandText, mediaUrl, mediaType }) {
+  const basePayload = {
+    command_text: commandText,
+    image_url: mediaUrl,
+  };
+
+  const payloads = mediaType
+    ? [
+        {
+          ...basePayload,
+          media_type: mediaType,
+        },
+        basePayload,
+      ]
+    : [basePayload];
+
+  let lastError = null;
+
+  for (const payload of payloads) {
+    const { error } = await supabase.from('updates').insert([payload]);
+
+    if (!error) {
+      return;
+    }
+
+    lastError = error;
+  }
+
+  throw lastError;
+}
+
+bot.start((ctx) => ctx.reply('Привіт, просто завантаж фото, відео або колекцію і додай опис!'));
+
 
 // НОВА МАГІЯ: Обробка фотографій
 bot.on('photo', async (ctx) => {
   try {
-    ctx.reply('Отримав фото! Завантажую в хмару, зачекай кілька секунд...');
-
+    await ctx.reply('Отримав фото! Завантажую в хмару, зачекай кілька секунд...');
     const photo = ctx.message.photo[ctx.message.photo.length - 1];
     const fileName = `${Date.now()}_${photo.file_id}.jpg`;
     const imageUrl = await uploadTelegramMedia(ctx, photo.file_id, fileName, 'image/jpeg');
     const caption = ctx.message.caption || 'Фото без підпису';
-    const { error: dbError } = await supabase.from('updates').insert([{ 
-      command_text: caption, 
-      image_url: imageUrl 
-    }]);
 
-    if (dbError) throw dbError;
-    ctx.reply('✅ Фотографію успішно завантажено на сайт!');
+    await saveMediaRecord({
+      commandText: caption,
+      mediaUrl: imageUrl,
+      mediaType: 'photo',
+    });
+
+    await ctx.reply('✅ Фотографію успішно завантажено на сайт!');
   } catch (error) {
     console.error('Помилка обробки фото:', error);
-    ctx.reply('❌ Сталася помилка під час завантаження фото.');
+    await ctx.reply('❌ Сталася помилка під час завантаження фото.');
   }
 });
 
@@ -77,23 +128,76 @@ bot.on(['video', 'animation'], async (ctx) => {
     const extension = getFileExtension(mimeType, 'mp4');
     const fileName = `${Date.now()}_${media.file_id}.${extension}`;
 
-    ctx.reply('Отримав відео! Завантажую в хмару, зачекай кілька секунд...');
+    await ctx.reply('Отримав відео! Завантажую в хмару, зачекай кілька секунд...');
 
     const mediaUrl = await uploadTelegramMedia(ctx, media.file_id, fileName, mimeType);
     const caption = ctx.message.caption || 'Відео без підпису';
 
-    const { error: dbError } = await supabase.from('updates').insert([{ 
-      command_text: caption,
-      image_url: mediaUrl 
-    }]);
+    await saveMediaRecord({
+      commandText: caption,
+      mediaUrl,
+      mediaType: 'video',
+    });
 
-    if (dbError) throw dbError;
-    ctx.reply('✅ Відео успішно завантажено на сайт!');
+    await ctx.reply('✅ Відео успішно завантажено на сайт!');
   } catch (error) {
     console.error('Помилка обробки відео:', error);
-    ctx.reply('❌ Сталася помилка під час завантаження відео.');
+    await ctx.reply('❌ Сталася помилка під час завантаження відео.');
   }
 });
+
+bot.on(media_group(), async (ctx) => {
+  try {
+    const group = ctx.update.media_group || [];
+
+    if (group.length === 0) {
+      return;
+    }
+
+    await ctx.reply(`Отримав колекцію з ${group.length} елементів! Завантажую в хмару, зачекай кілька секунд...`);
+
+    const uploadedMedia = [];
+
+    for (const media of group) {
+      const details = getTelegramMediaDetails(media);
+
+      if (!details) {
+        continue;
+      }
+
+      const mediaUrl = await uploadTelegramMedia(
+        ctx,
+        details.fileId,
+        details.fileName,
+        details.contentType
+      );
+
+      uploadedMedia.push({
+        url: mediaUrl,
+        type: details.mediaType,
+      });
+    }
+
+    if (uploadedMedia.length === 0) {
+      throw new Error('Колекція не містить підтримуваних медіа');
+    }
+
+    const coverMedia = uploadedMedia.find(item => item.type === 'photo') || uploadedMedia[0];
+    const caption = group.find(item => item.caption)?.caption || `Колекція з ${uploadedMedia.length} файлів`;
+
+    await saveMediaRecord({
+      commandText: `${COLLECTION_PREFIX}${caption}`,
+      mediaUrl: coverMedia.url,
+      mediaType: 'collection',
+    });
+
+    await ctx.reply('✅ Колекцію успішно завантажено на сайт!');
+  } catch (error) {
+    console.error('Помилка обробки колекції:', error);
+    await ctx.reply('❌ Сталася помилка під час завантаження колекції.');
+  }
+});
+
 
 bot.on('document', async (ctx) => {
   try {
@@ -111,16 +215,16 @@ bot.on('document', async (ctx) => {
 
     const caption = ctx.message.caption || 'Відео без підпису';
 
-    const { error: dbError } = await supabase.from('updates').insert([{ 
-      command_text: caption,
-      image_url: mediaUrl 
-    }]);
+    await saveMediaRecord({
+      commandText: caption,
+      mediaUrl,
+      mediaType: 'video',
+    });
 
-    if (dbError) throw dbError;
-    ctx.reply('✅ Відеофайл успішно завантажено на сайт!');
+    await ctx.reply('✅ Відеофайл успішно завантажено на сайт!');
   } catch (error) {
     console.error('Помилка обробки відеофайлу:', error);
-    ctx.reply('❌ Сталася помилка під час завантаження відеофайлу.');
+    await ctx.reply('❌ Сталася помилка під час завантаження відеофайлу.');
   }
 });
 

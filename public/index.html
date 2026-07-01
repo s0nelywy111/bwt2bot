@@ -13,15 +13,13 @@
 <body>
     <div class="page-shell">
         <section class="hero">
-            <h2>Трохи нас</h2>
-            <p>Кохаю тебе до безтями, сонечко♥♥♥</p>
-            <button id="open-gallery-btn" class="open-gallery-btn" type="button">Открыть галерею</button>
+            <h2>Наша особиста сторінка</h2>
+            <h1>Кохаю тебе до безтями, сонечко♥♥♥</h1>
+            <button id="open-gallery-btn" class="open-gallery-btn" type="button">Відкрити галерею</button>
         </section>
 
         <section id="featured-preview" class="featured-preview" aria-label="Превью фотографий">
             <div class="featured-preview__header">
-                <div class="eyebrow">Превью</div>
-                <h3 class="featured-preview__title">3 фотографии в ротации</h3>
             </div>
             <div id="featured-track" class="media-track media-track--preview">
                 <p class="empty-state">Завантажую фото...</p>
@@ -32,11 +30,13 @@
             <div class="gallery-shell__topbar">
                 <div>
                     <div class="eyebrow">Галерея</div>
-                    <h3 class="gallery-title">Фото и видео</h3>
+                    <h3 class="gallery-title">Фото, відео та колекції</h3>
                 </div>
                 <div class="gallery-tabs" role="tablist" aria-label="Выбор раздела галереи">
                     <button class="gallery-tab is-active" type="button" data-gallery-tab="photos">Фото</button>
-                    <button class="gallery-tab" type="button" data-gallery-tab="videos">Видео</button>
+                    <button class="gallery-tab" type="button" data-gallery-tab="videos">Відео</button>
+                    <button class="gallery-tab" type="button" data-gallery-tab="collections">Колекції</button>
+
                 </div>
             </div>
 
@@ -52,10 +52,19 @@
 
                 <section class="gallery-section" data-gallery-section="videos">
                     <div class="section-head">
-                        <h4>Видео</h4>
+                        <h4>Відео</h4>
                     </div>
                     <div id="video-track" class="media-track">
-                        <p class="empty-state">Видео пока нет</p>
+                        <p class="empty-state">Тут поки немає відео.</p>
+                    </div>
+                </section>
+
+                <section class="gallery-section" data-gallery-section="collections">
+                    <div class="section-head">
+                        <h4>Колекції</h4>
+                    </div>
+                    <div id="collection-track" class="media-track">
+                        <p class="empty-state">Колекцій поки немає.</p>
                     </div>
                 </section>
             </div>

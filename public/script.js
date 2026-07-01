@@ -11,6 +11,7 @@ const featuredTrack = document.getElementById('featured-track');
 const galleryPanel = document.getElementById('gallery-panel');
 const photoTrack = document.getElementById('photo-track');
 const videoTrack = document.getElementById('video-track');
+const collectionTrack = document.getElementById('collection-track');
 const galleryTabs = Array.from(document.querySelectorAll('[data-gallery-tab]'));
 const gallerySections = Array.from(document.querySelectorAll('[data-gallery-section]'));
 const photoModal = document.getElementById('photo-modal');
@@ -21,11 +22,13 @@ const photoModalClose = document.getElementById('photo-modal-close');
 
 let photoPool = [];
 let videoPool = [];
+let collectionPool = [];
 let featuredPhotos = [];
 let activeGalleryTab = 'photos';
 let featuredRotationTimerId = null;
 const featuredPhotoCount = 3;
 const featuredRotationIntervalMs = 2800;
+const COLLECTION_PREFIX = '__COLLECTION__:';
 
 function getMediaUrl(item) {
   return item.media_url || item.image_url || item.video_url || '';
@@ -35,6 +38,14 @@ function isVideoUrl(url) {
   return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url || '');
 }
 
+function getRenderableMediaType(media) {
+  if (media.type === 'collection' && isVideoUrl(media.src)) {
+    return 'video';
+  }
+
+  return media.type;
+}
+
 function normalizeMediaItem(item) {
   const src = getMediaUrl(item);
 
@@ -42,13 +53,21 @@ function normalizeMediaItem(item) {
     return null;
   }
 
-  const type = item.media_type || (isVideoUrl(src) ? 'video' : 'photo');
+  const rawCaption = item.command_text || '';
+  const isCollection = item.media_type === 'collection' || rawCaption.startsWith(COLLECTION_PREFIX);
+  const type = isCollection ? 'collection' : item.media_type || (isVideoUrl(src) ? 'video' : 'photo');
+  const captionFallbacks = {
+    collection: 'Колекція без підпису',
+    video: 'Видео без подписи',
+    photo: 'Фото без підпису',
+  };
+  const caption = isCollection ? rawCaption.replace(COLLECTION_PREFIX, '') : rawCaption;
 
   return {
     id: String(item.id || `${type}-${src}`),
     type,
     src,
-    caption: item.command_text || (type === 'video' ? 'Видео без подписи' : 'Фото без подписи'),
+    caption: caption || captionFallbacks[type] || 'Медіа без підпису',
   };
 }
 
@@ -58,11 +77,12 @@ function createMediaCard(media) {
   card.className = 'media-card';
   card.dataset.mediaId = media.id;
   card.dataset.mediaType = media.type;
+  const renderType = getRenderableMediaType(media);
 
   const frame = document.createElement('div');
   frame.className = 'media-card__frame';
 
-  if (media.type === 'video') {
+  if (renderType === 'video') {
     const video = document.createElement('video');
     video.className = 'media-card__video';
     video.src = media.src;
@@ -88,7 +108,7 @@ function createMediaCard(media) {
 
   const tag = document.createElement('span');
   tag.className = 'media-card__tag';
-  tag.textContent = media.type === 'video' ? 'Видео' : 'Фото';
+  tag.textContent = media.type === 'collection' ? 'Колекція' : media.type === 'video' ? 'Видео' : 'Фото';
 
   const caption = document.createElement('p');
   caption.className = 'media-card__caption';
@@ -194,6 +214,7 @@ function stopFeaturedRotation() {
 function renderGallery() {
   renderMediaTrack(photoTrack, photoPool, 'Фото пока нет');
   renderMediaTrack(videoTrack, videoPool, 'Видео пока нет');
+  renderMediaTrack(collectionTrack, collectionPool, 'Колекцій поки немає');
 }
 
 function setGalleryOpen(isOpen) {
@@ -228,7 +249,14 @@ function setActiveTab(tabName) {
 }
 
 function findMediaById(mediaId, mediaType) {
-  const pools = mediaType === 'video' ? videoPool : photoPool;
+  let pools = photoPool;
+
+  if (mediaType === 'video') {
+    pools = videoPool;
+  } else if (mediaType === 'collection') {
+    pools = collectionPool;
+  }
+
   return pools.find(item => item.id === mediaId);
 }
 
@@ -237,10 +265,12 @@ function openMediaModal(media) {
     return;
   }
 
-  photoModalImage.hidden = media.type !== 'photo';
-  photoModalVideo.hidden = media.type !== 'video';
+  const renderType = getRenderableMediaType(media);
 
-  if (media.type === 'video') {
+  photoModalImage.hidden = renderType !== 'photo';
+  photoModalVideo.hidden = renderType !== 'video';
+
+  if (renderType === 'video') {
     photoModalVideo.src = media.src;
     photoModalVideo.currentTime = 0;
     photoModalVideo.play().catch(() => {});
@@ -314,6 +344,22 @@ if (videoTrack) {
   });
 }
 
+if (collectionTrack) {
+  collectionTrack.addEventListener('click', event => {
+    const card = event.target.closest('.media-card');
+
+    if (!card) {
+      return;
+    }
+
+    const media = findMediaById(card.dataset.mediaId, card.dataset.mediaType);
+
+    if (media) {
+      openMediaModal(media);
+    }
+  });
+}
+
 if (photoModal) {
   photoModal.addEventListener('click', event => {
     if (event.target === photoModal) {
@@ -349,6 +395,7 @@ async function loadGalleryMedia() {
   const mediaItems = data.map(normalizeMediaItem).filter(Boolean);
   photoPool = mediaItems.filter(item => item.type === 'photo');
   videoPool = mediaItems.filter(item => item.type === 'video');
+  collectionPool = mediaItems.filter(item => item.type === 'collection');
   syncFeaturedPhotos(pickRandomItems(photoPool, featuredPhotoCount));
 
   renderGallery();
@@ -370,6 +417,8 @@ dbClient
     if (normalized) {
       if (normalized.type === 'video') {
         videoPool.unshift(normalized);
+      } else if (normalized.type === 'collection') {
+        collectionPool.unshift(normalized);
       } else {
         photoPool.unshift(normalized);
         if (!galleryPanel || galleryPanel.getAttribute('aria-hidden') === 'true') {

@@ -4,6 +4,15 @@ const { createClient } = require('@supabase/supabase-js');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const COLLECTION_PREFIX = '__COLLECTION__:';
+const SUPPORTED_FORMATS_MESSAGE = [
+  'Можеш надсилати:',
+  '• фото',
+  '• відео',
+  '• відео як файл-документ',
+  '• колекцію / медіагрупу з кількох фото або відео',
+  '',
+  'До фото і відео можна додати підпис — він збережеться на сайті.',
+].join('\n');
 
 bot.use(new MediaGroup({ timeout: 1000 }).middleware());
 
@@ -96,7 +105,18 @@ async function saveMediaRecord({ commandText, mediaUrl, mediaType }) {
   throw lastError;
 }
 
-bot.start((ctx) => ctx.reply('Привіт, просто завантаж фото, відео або колекцію і додай опис!'));
+function createCollectionCommandText(collectionId, caption) {
+  return `${COLLECTION_PREFIX}${collectionId}|${caption}`;
+}
+
+async function sendUploadHelp(ctx) {
+  await ctx.reply(
+    `Привіт, просто завантаж медіа і додай опис!\n\n${SUPPORTED_FORMATS_MESSAGE}`
+  );
+}
+
+bot.start(sendUploadHelp);
+bot.help(sendUploadHelp);
 
 
 // НОВА МАГІЯ: Обробка фотографій
@@ -157,6 +177,7 @@ bot.on(media_group(), async (ctx) => {
     await ctx.reply(`Отримав колекцію з ${group.length} елементів! Завантажую в хмару, зачекай кілька секунд...`);
 
     const uploadedMedia = [];
+    const collectionId = group[0]?.media_group_id || `collection-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     for (const media of group) {
       const details = getTelegramMediaDetails(media);
@@ -176,20 +197,17 @@ bot.on(media_group(), async (ctx) => {
         url: mediaUrl,
         type: details.mediaType,
       });
+
+      await saveMediaRecord({
+        commandText: createCollectionCommandText(collectionId, group.find(item => item.caption)?.caption || `Колекція з ${group.length} файлів`),
+        mediaUrl,
+        mediaType: details.mediaType,
+      });
     }
 
     if (uploadedMedia.length === 0) {
       throw new Error('Колекція не містить підтримуваних медіа');
     }
-
-    const coverMedia = uploadedMedia.find(item => item.type === 'photo') || uploadedMedia[0];
-    const caption = group.find(item => item.caption)?.caption || `Колекція з ${uploadedMedia.length} файлів`;
-
-    await saveMediaRecord({
-      commandText: `${COLLECTION_PREFIX}${caption}`,
-      mediaUrl: coverMedia.url,
-      mediaType: 'collection',
-    });
 
     await ctx.reply('✅ Колекцію успішно завантажено на сайт!');
   } catch (error) {

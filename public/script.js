@@ -38,12 +38,31 @@ function isVideoUrl(url) {
   return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url || '');
 }
 
-function getRenderableMediaType(media) {
-  if (media.type === 'collection' && isVideoUrl(media.src)) {
-    return 'video';
+function parseCollectionMetadata(rawCaption) {
+  if (!rawCaption.startsWith(COLLECTION_PREFIX)) {
+    return {
+      isCollectionMember: false,
+      collectionKey: null,
+      collectionTitle: null,
+    };
   }
 
-  return media.type;
+  const encoded = rawCaption.slice(COLLECTION_PREFIX.length);
+  const separatorIndex = encoded.indexOf('|');
+
+  if (separatorIndex === -1) {
+    return {
+      isCollectionMember: true,
+      collectionKey: encoded || null,
+      collectionTitle: encoded || '',
+    };
+  }
+
+  return {
+    isCollectionMember: true,
+    collectionKey: encoded.slice(0, separatorIndex) || null,
+    collectionTitle: encoded.slice(separatorIndex + 1) || '',
+  };
 }
 
 function normalizeMediaItem(item) {
@@ -54,21 +73,148 @@ function normalizeMediaItem(item) {
   }
 
   const rawCaption = item.command_text || '';
-  const isCollection = item.media_type === 'collection' || rawCaption.startsWith(COLLECTION_PREFIX);
-  const type = isCollection ? 'collection' : item.media_type || (isVideoUrl(src) ? 'video' : 'photo');
+  const collectionMetadata = parseCollectionMetadata(rawCaption);
+  const type = item.media_type || (isVideoUrl(src) ? 'video' : 'photo');
   const captionFallbacks = {
-    collection: 'Колекція без підпису',
     video: 'Відео без підпису',
     photo: 'Фото без підпису',
   };
-  const caption = isCollection ? rawCaption.replace(COLLECTION_PREFIX, '') : rawCaption;
 
   return {
     id: String(item.id || `${type}-${src}`),
     type,
     src,
-    caption: caption || captionFallbacks[type] || 'Медіа без підпису',
+    caption: collectionMetadata.collectionTitle || rawCaption || captionFallbacks[type] || 'Медіа без підпису',
+    collectionKey: collectionMetadata.collectionKey,
+    isCollectionMember: collectionMetadata.isCollectionMember,
   };
+}
+
+function getRenderableMediaType(media) {
+  if (media.type === 'collection' && media.items && media.items.length > 0) {
+    return getRenderableMediaType(media.items[0]);
+  }
+
+  if (media.type === 'collection' && isVideoUrl(media.src)) {
+    return 'video';
+  }
+
+  return media.type;
+}
+
+function createPreviewThumb(media, orderIndex) {
+  const thumb = document.createElement('div');
+  thumb.className = `collection-stack__item collection-stack__item--${orderIndex + 1}`;
+
+  if (isVideoUrl(media.src)) {
+    const video = document.createElement('video');
+    video.className = 'collection-stack__media';
+    video.src = media.src;
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    thumb.appendChild(video);
+  } else {
+    const image = document.createElement('img');
+    image.className = 'collection-stack__media';
+    image.src = media.src;
+    image.alt = media.caption;
+    thumb.appendChild(image);
+  }
+
+  return thumb;
+}
+
+function createCollectionCard(collection) {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'media-card media-card--collection';
+  card.dataset.mediaId = collection.id;
+  card.dataset.mediaType = collection.type;
+
+  const frame = document.createElement('div');
+  frame.className = 'media-card__frame media-card__frame--collection';
+
+  const stack = document.createElement('div');
+  stack.className = 'collection-stack';
+
+  collection.items.slice(0, 3).forEach((item, index) => {
+    stack.appendChild(createPreviewThumb(item, index));
+  });
+
+  if (collection.items.length > 3) {
+    const extraCount = document.createElement('div');
+    extraCount.className = 'collection-stack__more';
+    extraCount.textContent = `+${collection.items.length - 3}`;
+    stack.appendChild(extraCount);
+  }
+
+  const countBadge = document.createElement('div');
+  countBadge.className = 'collection-stack__count';
+  countBadge.textContent = `${collection.items.length} медіа`;
+
+  frame.appendChild(stack);
+  frame.appendChild(countBadge);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'media-card__overlay';
+
+  const tag = document.createElement('span');
+  tag.className = 'media-card__tag';
+  tag.textContent = 'Колекція';
+
+  const caption = document.createElement('p');
+  caption.className = 'media-card__caption';
+  caption.textContent = collection.caption;
+
+  overlay.appendChild(tag);
+  overlay.appendChild(caption);
+
+  card.appendChild(frame);
+  card.appendChild(overlay);
+
+  return card;
+}
+
+function buildGalleryPools(items) {
+  const photos = [];
+  const videos = [];
+  const collectionMap = new Map();
+
+  items.forEach(item => {
+    if (item.isCollectionMember && item.collectionKey) {
+      const collectionId = String(item.collectionKey);
+
+      if (!collectionMap.has(collectionId)) {
+        collectionMap.set(collectionId, {
+          id: `collection-${collectionId}`,
+          type: 'collection',
+          caption: item.caption || 'Колекція без підпису',
+          items: [],
+        });
+      }
+
+      collectionMap.get(collectionId).items.push(item);
+      return;
+    }
+
+    if (item.type === 'video') {
+      videos.push(item);
+    } else {
+      photos.push(item);
+    }
+  });
+
+  const collections = Array.from(collectionMap.values())
+    .filter(collection => collection.items.length > 0)
+    .map(collection => ({
+      ...collection,
+      src: collection.items[0].src,
+      cover: collection.items[0],
+      count: collection.items.length,
+    }));
+
+  return { photos, videos, collections };
 }
 
 function createMediaCard(media) {
@@ -138,7 +284,7 @@ function renderMediaTrack(trackElement, items, emptyText) {
   }
 
   items.forEach(item => {
-    trackElement.appendChild(createMediaCard(item));
+    trackElement.appendChild(item.type === 'collection' ? createCollectionCard(item) : createMediaCard(item));
   });
 }
 
@@ -265,17 +411,18 @@ function openMediaModal(media) {
     return;
   }
 
-  const renderType = getRenderableMediaType(media);
+  const mediaTarget = media.type === 'collection' && media.items && media.items.length > 0 ? media.items[0] : media;
+  const renderType = getRenderableMediaType(mediaTarget);
 
   photoModalImage.hidden = renderType !== 'photo';
   photoModalVideo.hidden = renderType !== 'video';
 
   if (renderType === 'video') {
-    photoModalVideo.src = media.src;
+    photoModalVideo.src = mediaTarget.src;
     photoModalVideo.currentTime = 0;
     photoModalVideo.play().catch(() => {});
   } else {
-    photoModalImage.src = media.src;
+    photoModalImage.src = mediaTarget.src;
     photoModalImage.alt = media.caption;
   }
 
@@ -393,9 +540,10 @@ async function loadGalleryMedia() {
   }
 
   const mediaItems = data.map(normalizeMediaItem).filter(Boolean);
-  photoPool = mediaItems.filter(item => item.type === 'photo');
-  videoPool = mediaItems.filter(item => item.type === 'video');
-  collectionPool = mediaItems.filter(item => item.type === 'collection');
+  const groupedPools = buildGalleryPools(mediaItems);
+  photoPool = groupedPools.photos;
+  videoPool = groupedPools.videos;
+  collectionPool = groupedPools.collections;
   syncFeaturedPhotos(pickRandomItems(photoPool, featuredPhotoCount));
 
   renderGallery();
@@ -412,30 +560,12 @@ dbClient
       statusDiv.innerText = `Отримано оновлення: "${newData.command_text}"`;
     }
 
-    const normalized = normalizeMediaItem(newData);
-
-    if (normalized) {
-      if (normalized.type === 'video') {
-        videoPool.unshift(normalized);
-      } else if (normalized.type === 'collection') {
-        collectionPool.unshift(normalized);
-      } else {
-        photoPool.unshift(normalized);
-        if (!galleryPanel || galleryPanel.getAttribute('aria-hidden') === 'true') {
-          syncFeaturedPhotos(pickRandomItems(photoPool, featuredPhotoCount));
-        }
-      }
-
-      renderGallery();
-      if (featuredPreview && !featuredPreview.classList.contains('is-hidden')) {
-        renderFeaturedPreview();
-      }
-    } else {
-      if (logList) {
-        const li = document.createElement('li');
-        li.innerText = `[${new Date().toLocaleTimeString()}] ${newData.command_text}`;
-        logList.prepend(li);
-      }
+    if (logList) {
+      const li = document.createElement('li');
+      li.innerText = `[${new Date().toLocaleTimeString()}] ${newData.command_text}`;
+      logList.prepend(li);
     }
+
+    loadGalleryMedia();
   })
   .subscribe();

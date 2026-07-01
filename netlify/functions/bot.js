@@ -105,6 +105,10 @@ async function saveMediaRecord({ commandText, mediaUrl, mediaType }) {
   throw lastError;
 }
 
+function isMediaGroupMessage(ctx) {
+  return Boolean(ctx?.message?.media_group_id);
+}
+
 function createCollectionCommandText(collectionId, caption) {
   return `${COLLECTION_PREFIX}${collectionId}|${caption}`;
 }
@@ -122,6 +126,10 @@ bot.help(sendUploadHelp);
 // НОВА МАГІЯ: Обробка фотографій
 bot.on('photo', async (ctx) => {
   try {
+    if (isMediaGroupMessage(ctx)) {
+      return;
+    }
+
     await ctx.reply('Отримав фото! Завантажую в хмару, зачекай кілька секунд...');
     const photo = ctx.message.photo[ctx.message.photo.length - 1];
     const fileName = `${Date.now()}_${photo.file_id}.jpg`;
@@ -143,6 +151,10 @@ bot.on('photo', async (ctx) => {
 
 bot.on(['video', 'animation'], async (ctx) => {
   try {
+    if (isMediaGroupMessage(ctx)) {
+      return;
+    }
+
     const media = ctx.message.video || ctx.message.animation;
     const mimeType = media.mime_type || (ctx.message.animation ? 'video/mp4' : 'video/mp4');
     const extension = getFileExtension(mimeType, 'mp4');
@@ -219,6 +231,10 @@ bot.on(media_group(), async (ctx) => {
 
 bot.on('document', async (ctx) => {
   try {
+    if (isMediaGroupMessage(ctx)) {
+      return;
+    }
+
     const document = ctx.message.document;
     if (!document.mime_type || !document.mime_type.startsWith('video/')) {
       return;
